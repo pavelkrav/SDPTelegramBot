@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ini>
+  <lastrequest>6714</lastrequest>
+  <offset>628589177</offset>
+  <technicians>
+    <amount>5</amount>
+    <technician>Павлов Дмитрий Андреевич</technician>
+    <tel_id>120790667</tel_id>
+    <technician>Куликов Александр Александрович</technician>
+    <tel_id>298360830</tel_id>
+    <technician>Сорокин Владимир Александрович</technician>
+    <tel_id>265194383</tel_id>
+    <technician>Муравьев Андрей Владимирович</technician>
+    <tel_id>232123311</tel_id>
+    <technician>Шамилов Дмитрий Васильевич</technician>
+    <tel_id>162436268</tel_id>
+  </technicians>
+  <admins>
+    <amount>1</amount>
+    <admin>Кравцов Павел Олегович</admin>
+    <tel_id>113054443</tel_id>
+  </admins>
+</ini>
