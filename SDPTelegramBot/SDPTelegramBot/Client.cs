@@ -238,8 +238,15 @@ namespace SDPTelegramBot
 			{
 				Console.WriteLine($"New tick\t{DateTime.Now.ToString("hh:mm:ss")}\toffset = {offset}\tlast request = {reqAmountSDP}");
 			}
+			tickCheckNewRequests();
+			tickCheckOpenRequestsChanges();
+			tickCheckTelegramUserRequests();
 
-			// check new requests, push them if pending, add pending request to user open requests list
+		}
+
+		// check new requests, push them if pending, add pending request to user open requests list
+		private void tickCheckNewRequests()
+		{
 			int newRequestsAmountSDP = checkNewRequestsSDP();
 			if (reqAmountSDP < newRequestsAmountSDP)
 			{
@@ -248,7 +255,7 @@ namespace SDPTelegramBot
 					SDPRequest request = new SDPRequest(i);
 					if (request.sdp_status == "Success" && (request.status != "Выполнено" || request.status != "Закрыто"))
 					{
-						pushRequestToTechnician(request);
+						pushNewRequestToTechnician(request);
 					}
 					reqAmountSDP++;
 					foreach (BotUser user in userList)
@@ -261,15 +268,95 @@ namespace SDPTelegramBot
 					saveRequestsAmountAs(reqAmountSDP);
 				}
 			}
+		}
 
+		private void tickCheckOpenRequestsChanges()
+		{
+			foreach (BotUser user in userList)
+			{
+				foreach (SDPRequest request in user.open_requests)
+				{
+					SDPRequest sdpreq = new SDPRequest(request.workorderid);
+					//check if request is closed
+					if (sdpreq.status == "Выполнено" || request.status == "Закрыто")
+					{
+						pushOnCloseRequestNotification(request);
+						// change open requests list for old tech
+						List<SDPRequest> newlist = user.open_requests;
+						user.open_requests = new List<SDPRequest>();
+						foreach (SDPRequest req in newlist)
+						{
+							if (req.workorderid != request.workorderid)
+							{
+								user.open_requests.Add(req);
+							}
+						}
+					}
+
+					//check if request is assigned to another technician
+					if (request.technician != sdpreq.technician)
+					{
+						int new_tech = -1;
+						for (int i = 0; i < userList.Count; i++)
+						{
+							if (userList[i].sdp_name == sdpreq.technician)
+							{
+								new_tech = i;
+							}
+						}
+						pushTechnicianChangedNotificationToOld(user, sdpreq.technician, request);
+						// change open requests list for old tech
+						List<SDPRequest> newlist_old = user.open_requests;
+						user.open_requests = new List<SDPRequest>();
+						foreach (SDPRequest req in newlist_old)
+						{
+							if (req.workorderid != request.workorderid)
+							{
+								user.open_requests.Add(req);
+							}
+						}
+						// check if new technician is registered in bot
+						if (new_tech >= 0)
+						{
+							pushTechnicianChangedNotificationToNew(userList[new_tech], request.technician, sdpreq);
+							// change open requests list for new tech							
+							userList[new_tech].open_requests.Add(sdpreq);
+						}
+					}
+					//check request priority
+					if (request.priority != sdpreq.priority)
+					{
+						pushPriorityChangeToTechnician(user.tel_id, sdpreq, request.priority);
+						// change open requests list
+						List <SDPRequest> newlist = user.open_requests;
+						user.open_requests = new List<SDPRequest>();
+						foreach(SDPRequest req in newlist)
+						{
+							if (req.workorderid != request.workorderid)
+							{
+								user.open_requests.Add(req);
+							}
+							else
+							{
+								user.open_requests.Add(new SDPRequest(req.workorderid));
+							}
+						}
+					}
+				}
+
+			}
+		}
+
+		private void tickCheckTelegramUserRequests()
+		{
 
 		}
 
 		/// <summary>
-		/// Returns new request amount. Does not update field reqAmountSDP.
+		/// Returns new request amount. Does not update field reqAmountSDP. Supposed to run every tick.
 		/// </summary>
 		/// <returns>New request amount</returns>
-		private int checkNewRequestsSDP()
+		private int checkNewRequestsSDP()			// may be optimized with single http request?
 		{
 			int newReqAmount = reqAmountSDP;
 			int err = 0;
@@ -294,12 +381,12 @@ namespace SDPTelegramBot
 				else
 					err = 100;
 			}
-			while (err < 3);
+			while (err < 5);	// deep = 5
 
 			return newReqAmount;
 		}
 
-		private void pushRequestToTechnician(SDPRequest request)
+		private void pushNewRequestToTechnician(SDPRequest request)
 		{
 			long tel_id = 0;
 
@@ -309,18 +396,91 @@ namespace SDPTelegramBot
 					tel_id = user.tel_id;
 			}
 
+			// check if technician is supposed to get notifications
 			if (tel_id > 0)
 			{
 				string message = null;
-				message += $"Поступила новая заявка ID{request.workorderid} от {request.requester}";
+				message += $"Вам поступила новая заявка ID{request.workorderid} от {request.requester}";
 				message += "\n" + $"Приоритет: {request.priority}";
 				message += "\n" + request.subject;
-				message += "\n" + request.shortdescription;     // need to decode html string to plain text
+				message += "\n" + request.shortdescription;     // need to decode html string to plain text from full description
 				if (request.area != "Рождественка")
 					message += $"\nПлощадка: {request.area}";
 				
 				List<string> param = new List<string>() { "chat_id", "text" };
 				List<string> param_def = new List<string>() {tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
+		}
+
+		private void pushPriorityChangeToTechnician(long tel_id, SDPRequest request, string old_priority)
+		{
+			// check if technician is supposed to get notifications
+			if (tel_id > 0)
+			{
+				string message = $"Приоритет Вашей заявки ID{request.workorderid} ({request.subject}) изменен с {old_priority} на {request.priority}.";
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
+		}
+
+		private void pushTechnicianChangedNotificationToOld(BotUser old_tech, string new_tech, SDPRequest request)
+		{
+			// check if technician is supposed to get notifications
+			if (old_tech.tel_id > 0)
+			{
+				string message = $"Ваша заявка ID{request.workorderid} ({request.subject}) назначена на нового инженера - {new_tech}.";
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { old_tech.tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
+		}
+
+		private void pushTechnicianChangedNotificationToNew(BotUser new_tech, string old_tech, SDPRequest request)
+		{
+			// check if technician is supposed to get notifications
+			if (new_tech.tel_id > 0)
+			{
+				string message = $"Заявка ID{request.workorderid}, ранее назначенная на {old_tech}, переадресована Вам:";
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { new_tech.tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+				pushNewRequestToTechnician(request);	// merge in 1 message later
+			}
+		}
+
+		private void pushOnCloseRequestNotification(SDPRequest request)
+		{
+			long tel_id = 0;
+
+			foreach (BotUser user in userList)
+			{
+				if (request.technician == user.sdp_name)
+					tel_id = user.tel_id;
+			}
+
+			// check if technician is supposed to get notifications
+			if (tel_id > 0)
+			{
+				string message = $"Ваша заявка ID{request.workorderid} ({request.subject}) закрыта.";
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
+		}
+
+		public void pushMessageToAll(string message)
+		{
+			foreach (BotUser user in userList)
+			{
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { user.tel_id.ToString(), message };
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);
 				msg.pushRequest();
 			}

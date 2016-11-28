@@ -42,6 +42,10 @@ namespace SDPTelegramBot
 
 			Client client = new Client();
 			client.Start(0, true);
+			//client.pushMessageToAll("Сори пацаны, это пиздеж, я прост туповат, ниче не закрыто на самом деле. Всякое бывает =)");
+
+			//SDPRequest req = new SDPRequest(6730);
+			//Console.WriteLine();
 
 
 
