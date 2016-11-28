@@ -45,7 +45,7 @@ namespace SDPTelegramBot
 			//client.pushMessageToAll("Сори пацаны, это пиздеж, я прост туповат, ниче не закрыто на самом деле. Всякое бывает =)");
 
 			//SDPRequest req = new SDPRequest(6730);
-			//Console.WriteLine();
+			//Console.WriteLine("\u041a\u0443\u043b\u0438\u043a\u043e\u0432");
 
 
 

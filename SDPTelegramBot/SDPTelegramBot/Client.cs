@@ -8,6 +8,7 @@ using System.Xml;
 using System.Configuration;
 using System.IO;
 using System.Web;
+using Newtonsoft.Json;
 
 namespace SDPTelegramBot
 {
@@ -240,7 +241,7 @@ namespace SDPTelegramBot
 			}
 			tickCheckNewRequests();
 			tickCheckOpenRequestsChanges();
-			tickCheckTelegramUserRequests();
+			//tickCheckTelegramUserRequests();
 
 		}
 
@@ -343,13 +344,47 @@ namespace SDPTelegramBot
 						}
 					}
 				}
-
 			}
 		}
 
 		private void tickCheckTelegramUserRequests()
 		{
+			TELRequest request = new TELRequest("getUpdates", "offset", offset.ToString());
+			GetUpdates updates = JsonConvert.DeserializeObject<GetUpdates>(request.getResponseString());
+			foreach (GetUpdatesResult result in updates.result)
+			{
+				if (result.message.text.Length > 0)
+				{
+					string message = getTelegramBotAnswer(result.message.text);
 
+					List<string> param = new List<string>() { "chat_id", "text" };
+					List<string> param_def = new List<string>() { result.message.from.id.ToString(), message };
+					TELRequest answer = new TELRequest("sendMessage", param, param_def);
+					answer.pushRequest();
+				}
+				offset++;
+			}
+		}
+
+		private string getTelegramBotAnswer(string messageText)
+		{
+			if(getTelegramBotCommand(ref messageText))
+			{
+
+			}
+		}
+
+		private bool getTelegramBotCommand(ref string request)
+		{
+
+			if (request[0] == '/' || request[0] == '!')
+			{
+
+			}
+			else
+			{
+				return false;
+			}
 		}
 
 		/// <summary>
