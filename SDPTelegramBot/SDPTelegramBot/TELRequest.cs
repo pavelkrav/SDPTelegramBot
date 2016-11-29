@@ -67,7 +67,7 @@ namespace SDPTelegramBot
 					}
 				}
 			}
-			wc.DownloadData(reqStr);
+			wc.DownloadString(reqStr);
 		}
 
 		public string getResponseString()

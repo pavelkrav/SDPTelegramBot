@@ -48,7 +48,9 @@ namespace SDPTelegramBot
 						string sdp_name = reader.ReadElementContentAsString();
 						reader.ReadToFollowing("tel_id");
 						long tel_id = reader.ReadElementContentAsLong();
-						userList.Add(new Technician(sdp_name, tel_id)); 
+						reader.ReadToFollowing("abb");
+						string abb = reader.ReadElementContentAsString();
+						userList.Add(new Technician(sdp_name, tel_id, abb));
 					}
 
 					reader.ReadToFollowing("admins");
@@ -61,7 +63,9 @@ namespace SDPTelegramBot
 						string sdp_name = reader.ReadElementContentAsString();
 						reader.ReadToFollowing("tel_id");
 						long tel_id = reader.ReadElementContentAsLong();
-						userList.Add(new Admin(sdp_name, tel_id)); 
+						reader.ReadToFollowing("abb");
+						string abb = reader.ReadElementContentAsString();
+						userList.Add(new Admin(sdp_name, tel_id, abb)); 
 					}
 				}
 				initialUpdateReqAmountSDP();
@@ -83,9 +87,18 @@ namespace SDPTelegramBot
 			Console.WriteLine($"Technicians: {techAmount}");
 			foreach (BotUser tech in userList)
 			{
+				int spc = 32 - tech.sdp_name.Length; // total shit =)
+				string spaces = null;				// tho no clue to do it properly
+				if (spc > 0)
+				{
+					for (int i = 0; i < spc; i++)
+					{
+						spaces += " ";
+					}
+				}
 				if (tech.ToString() == "Technician")
 				{
-					Console.WriteLine($"{tech.sdp_name}\tid: {tech.tel_id}\tOpen requests: {tech.open_requests.Count}");
+					Console.WriteLine($"{tech.sdp_name:31} ({tech.abbreviation}){spaces}\tid: {tech.tel_id}\tOpen requests: {tech.open_requests.Count}");
 				}
 			}
 			Console.WriteLine($"\nAdmins: {adminAmount}");
@@ -93,7 +106,7 @@ namespace SDPTelegramBot
 			{
 				if (admin.ToString() == "Admin")
 				{
-					Console.WriteLine($"{admin.sdp_name}\tid: {admin.tel_id}\tOpen requests: {admin.open_requests.Count}");
+					Console.WriteLine($"{admin.sdp_name} ({admin.abbreviation})\tid: {admin.tel_id}\tOpen requests: {admin.open_requests.Count}");
 				}
 			}
 			Console.WriteLine();
@@ -160,6 +173,18 @@ namespace SDPTelegramBot
 
 			doc.Save(iniPath);
 		}
+
+		//private void saveOffsetAs(int offset)
+		//{
+		//	XmlDocument doc = new XmlDocument();
+		//	doc.Load(iniPath);
+		//	XmlElement ini = doc.DocumentElement;
+		//	XmlNode lastreq = ini.FirstChild;
+		//	lastreq.RemoveChild(lastreq.FirstChild);
+		//	lastreq.AppendChild(doc.CreateTextNode(offset.ToString()));
+
+		//	doc.Save(iniPath);
+		//}
 
 		private void initialOpenRequestsCheck()
 		{
@@ -241,7 +266,7 @@ namespace SDPTelegramBot
 			}
 			tickCheckNewRequests();
 			tickCheckOpenRequestsChanges();
-			//tickCheckTelegramUserRequests();
+			tickCheckTelegramUserRequests();
 
 		}
 
@@ -353,33 +378,143 @@ namespace SDPTelegramBot
 			GetUpdates updates = JsonConvert.DeserializeObject<GetUpdates>(request.getResponseString());
 			foreach (GetUpdatesResult result in updates.result)
 			{
+				// check if message includes text
 				if (result.message.text.Length > 0)
 				{
-					string message = getTelegramBotAnswer(result.message.text);
+					int user = -1;
+					for (int i = 0; i < userList.Count; i++)	// should have used LINQ here?
+					{
+						if (userList[i].tel_id == result.message.from.id)
+						{
+							user = i;
+						}
+					}
+					// check if user is registered in bot
+					if (user >= 0)
+					{
+						string message = getTelegramBotAnswer(result.message.text, userList[user]);
 
-					List<string> param = new List<string>() { "chat_id", "text" };
-					List<string> param_def = new List<string>() { result.message.from.id.ToString(), message };
-					TELRequest answer = new TELRequest("sendMessage", param, param_def);
-					answer.pushRequest();
+						if (message != "failure")
+						{
+							List<string> param = new List<string>() { "chat_id", "text" };
+							List<string> param_def = new List<string>() { userList[user].tel_id.ToString(), message };
+							TELRequest answer = new TELRequest("sendMessage", param, param_def);
+							answer.pushRequest();
+						}
+					}
 				}
 				offset++;
 			}
+
 		}
 
-		private string getTelegramBotAnswer(string messageText)
+		private string getTelegramBotAnswer(string messageText, BotUser user)
 		{
-			if(getTelegramBotCommand(ref messageText))
+			string command = messageText;
+			string answer = null;
+			if (getTelegramBotCommand(ref command))
 			{
+				string[] name = user.sdp_name.Split(' ');
+				switch (command)
+				{
+					case "help":						
+						answer = getHelpAnswer(user);
+						break;
+					case "info":
+						answer += $"Привет, {name[1]}";
+						break;
+					case "pending":		// done
+						answer = getPendingAnswer(user);
+						break;
+					case "close":
+						break;
+					case "userlist":	// done
+						answer = getUserlistAnswer();
+						break;
+					case "report":
+						if (user.ToString() == "Admin")
+						{
+							answer = "not ready yet";
+							break;
+						}
+						else return "failure";
+					default:
+						return "failure";
+				}
 
+				return answer;
 			}
+			else
+			{
+				return "failure";
+			}
+		}
+
+		private string getHelpAnswer(BotUser user)
+		{
+			return "not ready yet";
+		}
+
+		private string getPendingAnswer(BotUser user)
+		{
+			string answer = null;
+			foreach (SDPRequest request in user.open_requests)
+			{
+				answer += $"ID{request.workorderid} - {request.subject}\n";
+			}
+			answer += $"\nИтого: {user.open_requests.Count} Заявок\n";
+			answer += "Для подробной информации по заявке - /info [ID]";
+			return answer;
+		}
+
+		private string getUserlistAnswer()
+		{
+			string answer = null;
+			foreach (BotUser user in userList)
+			{
+				answer += $"{user.sdp_name} - {user.abbreviation}\n";
+			}
+			return answer;
 		}
 
 		private bool getTelegramBotCommand(ref string request)
 		{
 
-			if (request[0] == '/' || request[0] == '!')
+			if (request[0] == '/' || request[0] == '!' || request[0] == '.')
 			{
+				request = request.Substring(1).ToLower();
+				string[] splitted = request.Split(' ');
+				if(splitted.Length > 2 || splitted.Length < 1)
+				{
+					return false;
+				}
+				else
+				{
+					request = splitted[0];
+					return true;
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
 
+		private bool getTelegramBotSubCommand(ref string request)
+		{
+			if (request[0] == '/' || request[0] == '!' || request[0] == '.')
+			{
+				request = request.Substring(1).ToLower();
+				string[] splitted = request.Split(' ');
+				if (splitted.Length > 2 || splitted.Length < 1)
+				{
+					return false;
+				}
+				else
+				{
+					request = splitted[1];
+					return true;
+				}
 			}
 			else
 			{
@@ -514,12 +649,17 @@ namespace SDPTelegramBot
 		{
 			foreach (BotUser user in userList)
 			{
-				List<string> param = new List<string>() { "chat_id", "text" };
-				List<string> param_def = new List<string>() { user.tel_id.ToString(), message };
-				TELRequest msg = new TELRequest("sendMessage", param, param_def);
-				msg.pushRequest();
+				// check if user is supposed to get notifications
+				if (user.tel_id > 0)
+				{
+					List<string> param = new List<string>() { "chat_id", "text" };
+					List<string> param_def = new List<string>() { user.tel_id.ToString(), message };
+					TELRequest msg = new TELRequest("sendMessage", param, param_def);
+					msg.pushRequest();
+				}
 			}
 		}
+
 
 	}
 }

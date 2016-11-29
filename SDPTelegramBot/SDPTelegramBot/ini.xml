@@ -1,23 +1,29 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <ini>
-  <lastrequest>6752</lastrequest>
-  <offset>628589186</offset>
+  <lastrequest>6775</lastrequest>
+  <offset>628589208</offset>
   <technicians>
     <amount>5</amount>
     <technician>Павлов Дмитрий Андреевич</technician>
     <tel_id>120790667</tel_id>
+    <abb>pav</abb>
     <technician>Куликов Александр Александрович</technician>
     <tel_id>298360830</tel_id>
+    <abb>kul</abb>
     <technician>Сорокин Владимир Александрович</technician>
     <tel_id>265194383</tel_id>
+    <abb>sor</abb>
     <technician>Муравьев Андрей Владимирович</technician>
     <tel_id>232123311</tel_id>
+    <abb>mur</abb>
     <technician>Шамилов Дмитрий Васильевич</technician>
     <tel_id>162436268</tel_id>
+    <abb>sha</abb>
   </technicians>
   <admins>
     <amount>1</amount>
     <admin>Кравцов Павел Олегович</admin>
     <tel_id>113054443</tel_id>
+    <abb>kra</abb>
   </admins>
 </ini>
