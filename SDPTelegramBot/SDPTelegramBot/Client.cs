@@ -140,51 +140,54 @@ namespace SDPTelegramBot
 			while (err < 30);
 			Console.Clear();
 
+			reqAmountSDP = newReqAmount;
+			saveRequestsAmountAs(reqAmountSDP);
+			Console.WriteLine($"Last request is #{reqAmountSDP}");
+		}
+
+		private void saveRequestsAmountAs(int amount)
+		{
 			try
 			{
 				XmlDocument doc = new XmlDocument();
 				doc.Load(iniPath);
-				XmlElement ini = doc.DocumentElement;
-				XmlNode lastreq = ini.FirstChild;
+				XmlNode lastreq = doc.SelectSingleNode("/ini/lastrequest");
 				lastreq.RemoveChild(lastreq.FirstChild);
-				lastreq.AppendChild(doc.CreateTextNode(newReqAmount.ToString()));
+				lastreq.AppendChild(doc.CreateTextNode(amount.ToString()));
 
 				doc.Save(iniPath);
-				Console.WriteLine("\"ini.xml\" file has been changed");
 			}
 			catch (Exception e)
 			{
 				Console.WriteLine("Could not find \"ini.xml\" file or it is not valid.");
 				Console.WriteLine("ini.xml file has not been changed");
 				Console.WriteLine(e.Message);
+				Console.ReadKey();
+				Environment.Exit(0);
 			}
-			reqAmountSDP = newReqAmount;
-			Console.WriteLine($"Last request is #{reqAmountSDP}");
 		}
 
-		private void saveRequestsAmountAs(int amount)
+		private void saveOffsetAs(long offset)
 		{
-			XmlDocument doc = new XmlDocument();
-			doc.Load(iniPath);
-			XmlElement ini = doc.DocumentElement;
-			XmlNode lastreq = ini.FirstChild;
-			lastreq.RemoveChild(lastreq.FirstChild);
-			lastreq.AppendChild(doc.CreateTextNode(amount.ToString()));
+			try
+			{
+				XmlDocument doc = new XmlDocument();
+				doc.Load(iniPath);
+				XmlNode offsetNode = doc.SelectSingleNode("/ini/offset");
+				offsetNode.RemoveChild(offsetNode.FirstChild);
+				offsetNode.AppendChild(doc.CreateTextNode(offset.ToString()));
 
-			doc.Save(iniPath);
+				doc.Save(iniPath);
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine("Could not find \"ini.xml\" file or it is not valid.");
+				Console.WriteLine("ini.xml file has not been changed");
+				Console.WriteLine(e.Message);
+				Console.ReadKey();
+				Environment.Exit(0);
+			}
 		}
-
-		//private void saveOffsetAs(int offset)
-		//{
-		//	XmlDocument doc = new XmlDocument();
-		//	doc.Load(iniPath);
-		//	XmlElement ini = doc.DocumentElement;
-		//	XmlNode lastreq = ini.FirstChild;
-		//	lastreq.RemoveChild(lastreq.FirstChild);
-		//	lastreq.AppendChild(doc.CreateTextNode(offset.ToString()));
-
-		//	doc.Save(iniPath);
-		//}
 
 		private void initialOpenRequestsCheck()
 		{
@@ -291,8 +294,8 @@ namespace SDPTelegramBot
 							user.open_requests.Add(request);
 						}
 					}
-					saveRequestsAmountAs(reqAmountSDP);
 				}
+				saveRequestsAmountAs(reqAmountSDP);
 			}
 		}
 
@@ -394,7 +397,7 @@ namespace SDPTelegramBot
 					{
 						string message = getTelegramBotAnswer(result.message.text, userList[user]);
 
-						if (message != "failure")
+						if (message != null)
 						{
 							List<string> param = new List<string>() { "chat_id", "text" };
 							List<string> param_def = new List<string>() { userList[user].tel_id.ToString(), message };
@@ -405,12 +408,13 @@ namespace SDPTelegramBot
 				}
 				offset++;
 			}
-
+			saveOffsetAs(offset);
 		}
 
 		private string getTelegramBotAnswer(string messageText, BotUser user)
 		{
 			string command = messageText;
+			string subcommand = messageText;
 			string answer = null;
 			if (getTelegramBotCommand(ref command))
 			{
@@ -421,12 +425,27 @@ namespace SDPTelegramBot
 						answer = getHelpAnswer(user);
 						break;
 					case "info":
-						answer += $"Привет, {name[1]}";
+						answer = getInfoAnswer(user);
 						break;
 					case "pending":		// done
 						answer = getPendingAnswer(user);
 						break;
-					case "close":
+					case "close":		// done
+						try
+						{
+							if (getTelegramBotSubCommand(ref subcommand))
+							{
+								answer = getCloseAnswer(user, subcommand);
+							}
+							else
+							{
+								answer = "Введите номер заявки через пробел";
+							}
+						}
+						catch
+						{
+							answer = "Введите номер заявки через пробел";
+						}
 						break;
 					case "userlist":	// done
 						answer = getUserlistAnswer();
@@ -437,21 +456,28 @@ namespace SDPTelegramBot
 							answer = "not ready yet";
 							break;
 						}
-						else return "failure";
+						else return null;
 					default:
-						return "failure";
+						return null;
 				}
 
 				return answer;
 			}
 			else
 			{
-				return "failure";
+				return null;
 			}
 		}
 
 		private string getHelpAnswer(BotUser user)
 		{
+			return "not ready yet";
+		}
+
+		private string getInfoAnswer(BotUser user)
+		{
+			//string answer = null;
+
 			return "not ready yet";
 		}
 
@@ -465,6 +491,29 @@ namespace SDPTelegramBot
 			answer += $"\nИтого: {user.open_requests.Count} Заявок\n";
 			answer += "Для подробной информации по заявке - /info [ID]";
 			return answer;
+		}
+
+		private string getCloseAnswer(BotUser user, string subcommand)
+		{
+			int id = 0;
+			try
+			{
+				id = Convert.ToInt32(subcommand);
+			}
+			catch
+			{
+				return "Введите допустимый номер заявки";
+			}
+			SDPRequest request = new SDPRequest(id);
+			if (request.status == "Выполнено" || request.status == "Закрыто")
+				return $"Заявка ID{request.workorderid} уже закрыта.";
+			else if (request.technician != user.sdp_name)
+				return $"Заявка ID{request.workorderid} назначена не на Вас. Текущий специалист - {request.technician}.";			
+			else
+			{
+				SDPRequest.closeRequest(request);
+				return null;
+			}
 		}
 
 		private string getUserlistAnswer()

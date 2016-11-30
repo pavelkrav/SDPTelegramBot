@@ -18,7 +18,6 @@ namespace SDPTelegramBot
 		{
 			Client client = new Client();
 			client.Start(0, true);
-			
 
 			//SDPRequest req = new SDPRequest(6730);
 			//Console.WriteLine("\u041a\u0443\u043b\u0438\u043a\u043e\u0432");

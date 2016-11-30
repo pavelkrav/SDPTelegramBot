@@ -177,5 +177,30 @@ namespace SDPTelegramBot
 			}
 		}
 
+		static public void closeRequest(SDPRequest request)
+		{
+			WebClient wc = new WebClient();
+			wc.Encoding = Encoding.UTF8;
+			wc.Headers["Content-Type"] = "application/xml; charset=UTF-8";
+
+			string reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "/resolution" + "?OPERATION_NAME=ADD_RESOLUTION"
+				+ "&INPUT_DATA=<Details><resolution><resolutiontext>Resolved</resolutiontext></resolution></Details>"
+				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
+			string xmlReqStr = null;
+			xmlReqStr = wc.DownloadString(reqStr);
+
+			reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "/resolution" + "?OPERATION_NAME=ADD_WORKLOG"
+				+ "&INPUT_DATA=<Operation><Details><Worklogs><Worklog><technician>" + request.technician + "</technician><workMinutes>10</workMinutes><workHours>0</workHours></Worklog></Worklogs></Details></Operation>"
+				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
+			xmlReqStr = null;
+			xmlReqStr = wc.DownloadString(reqStr);
+
+			reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "?OPERATION_NAME=EDIT_REQUEST"
+				+ "&INPUT_DATA=<Operation><Details><status>Выполнено</status><workminutes>10</workminutes></Details></Operation>"
+				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
+			xmlReqStr = null;
+			xmlReqStr = wc.DownloadString(reqStr);
+
+		}
 	}
 }
