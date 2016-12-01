@@ -177,7 +177,7 @@ namespace SDPTelegramBot
 			}
 		}
 
-		static public void closeRequest(SDPRequest request)
+		static public bool closeRequest(SDPRequest request)	// true if resolved
 		{
 			WebClient wc = new WebClient();
 			wc.Encoding = Encoding.UTF8;
@@ -201,6 +201,12 @@ namespace SDPTelegramBot
 			xmlReqStr = null;
 			xmlReqStr = wc.DownloadString(reqStr);
 
+			SDPRequest edited_req = new SDPRequest(request.workorderid);		// scanning xmlReqStr for status node would be faster
+			if (edited_req.status == "Выполнено")
+			{
+				return true;
+			}
+			else return false;
 		}
 	}
 }

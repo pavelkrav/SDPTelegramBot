@@ -267,9 +267,16 @@ namespace SDPTelegramBot
 			{
 				Console.WriteLine($"New tick\t{DateTime.Now.ToString("hh:mm:ss")}\toffset = {offset}\tlast request = {reqAmountSDP}");
 			}
-			tickCheckNewRequests();
-			tickCheckOpenRequestsChanges();
-			tickCheckTelegramUserRequests();
+			try
+			{
+				tickCheckNewRequests();
+				tickCheckOpenRequestsChanges();
+				tickCheckTelegramUserRequests();
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine(e.Message);
+			}
 
 		}
 
@@ -405,6 +412,23 @@ namespace SDPTelegramBot
 							answer.pushRequest();
 						}
 					}
+					// otherwise
+					else
+					{
+						string message = null;
+						message += $"Hi, {result.message.from.first_name}!\n";
+						message += "This bot is supposed to manage ServiceDesk Plus through telegram.\n";
+						message += "Only registered users can use the bot.\n";
+						message += "If you got any questions, contact administrator:\nPavel Kravtsov +7(916)179-60-67";
+
+						if (message != null)
+						{
+							List<string> param = new List<string>() { "chat_id", "text" };
+							List<string> param_def = new List<string>() { result.message.chat.id.ToString(), message };
+							TELRequest answer = new TELRequest("sendMessage", param, param_def);
+							answer.pushRequest();
+						}
+					}
 				}
 				offset++;
 			}
@@ -421,12 +445,21 @@ namespace SDPTelegramBot
 				string[] name = user.sdp_name.Split(' ');
 				switch (command)
 				{
-					case "help":						
-						answer = getHelpAnswer(user);
+					case "help":		// done				
+						answer = getHelpAnswer(name[1]);
 						break;
-					case "info":
-						answer = getInfoAnswer(user);
+					case "info":		// done
+						if (getTelegramBotSubCommand(ref subcommand))
+						{
+							answer = getRequestInfoAnswer(user, subcommand);
+						}
+						else
+						{
+							answer = getInfoAnswer();
+						}
 						break;
+					case "check":		// just for stupid fags
+						goto case "pending";
 					case "pending":		// done
 						answer = getPendingAnswer(user);
 						break;
@@ -469,27 +502,99 @@ namespace SDPTelegramBot
 			}
 		}
 
-		private string getHelpAnswer(BotUser user)
+		private string getHelpAnswer(string name)
 		{
-			return "not ready yet";
+			string answer = null;
+			answer += $"Привет, {name}!\n";
+			answer += "Запросы можно вводить через \"/\", \"!\" или \".\"\nСписок запросов:\n";
+			answer += "/info - информация о боте\n";
+			answer += "/info [ID] - информация по заявке с указанным номером\n";
+			answer += "/pending - список открытых заявок\n";
+			answer += "/close [ID] - закрыть заявку с указанным номером (номер следует вводить через пробел)\n";
+			answer += "/userlist - Список зарегистрированных пользователей\n";
+			answer += "/report - Отчет о закрытых заявках (доступно только администраторам бота)";
+
+			return answer;
 		}
 
-		private string getInfoAnswer(BotUser user)
+		private string getInfoAnswer()
 		{
-			//string answer = null;
+			string answer = null;
+			answer += "Этот бот работает с заявками из ServiceDesk \"НПО Городские Системы\". Он отслеживает новые заявки и изменения в старых, присылая оповещения инженерам.\n";
+			answer += "Более того, бот обрабатывает запросы. В любой момент времени Вы можете узнать свои открытые заявки и закрыть их. Чтобы узнать список возможных запросов, используйте команду /help.\n";
+			answer += "Бот работает только с зарегистрированными администратором пользователями.\n";
+			answer += "При обнаружении ошибок, а также по любым вопросам, просьба обращаться к администратору:\nКравцов Павел \u002B7(916)179-60-67\n";
 
-			return "not ready yet";
+			return answer;
+		}
+
+		private string getRequestInfoAnswer(BotUser user, string subcommand)
+		{
+			int id = 0;
+			try
+			{
+				id = Convert.ToInt32(subcommand);
+			}
+			catch
+			{
+				return "Введите допустимый номер заявки";
+			}
+			SDPRequest request = new SDPRequest(id);
+			if (request.status == "Failed" || request.workorderid > reqAmountSDP)
+				return $"Заявка ID{id} не существует.";
+			else
+			{
+				string message = null;
+
+				if (request.status == "Выполнено" || request.status == "Закрыто")
+				{
+					message += $"Заявка ID{request.workorderid} - закрыта\n";
+					message += $"Выполнил: {request.technician}\n";
+					message += $"Время выполнения: {request.timespentonreq}\n";
+					message += $"\n{request.subject}\n";
+					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"Площадка: {request.area}";
+				}
+				else if (request.status == "Зарегистрирована" || request.status == "В ожидании")
+				{
+					message += $"Заявка ID{request.workorderid}\n";
+					message += $"Назначена на: {request.technician}\n";
+					message += $"Приоритет: {request.priority}\n";
+					message += $"\n{request.subject}\n";
+					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"Площадка: {request.area}";
+				}
+				else
+				{
+					message += $"Заявка ID{request.workorderid}\n";
+					message += $"Назначена на: {request.technician}\n";
+					message += $"Статус: {request.status}\n";
+					message += $"Приоритет: {request.priority}\n";
+					message += $"\n{request.subject}\n";
+					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"Площадка: {request.area}";
+				}
+
+				return message;
+			}
 		}
 
 		private string getPendingAnswer(BotUser user)
 		{
 			string answer = null;
-			foreach (SDPRequest request in user.open_requests)
+			if (user.open_requests.Count > 0)
 			{
-				answer += $"ID{request.workorderid} - {request.subject}\n";
+				foreach (SDPRequest request in user.open_requests)
+				{
+					answer += $"ID{request.workorderid} - {request.subject}\n";
+				}
+				answer += $"\nИтого: {user.open_requests.Count} Заявок\n";
+				answer += "Для подробной информации по заявке введите команду /info [ID]";
 			}
-			answer += $"\nИтого: {user.open_requests.Count} Заявок\n";
-			answer += "Для подробной информации по заявке - /info [ID]";
+			else
+			{
+				answer += "У Вас нет открытых заявок. Поздравляю!";
+			}
 			return answer;
 		}
 
@@ -505,14 +610,17 @@ namespace SDPTelegramBot
 				return "Введите допустимый номер заявки";
 			}
 			SDPRequest request = new SDPRequest(id);
-			if (request.status == "Выполнено" || request.status == "Закрыто")
+			if (request.status == "Failed")
+				return $"Заявка ID{id} не существует.";
+			else if (request.status == "Выполнено" || request.status == "Закрыто")
 				return $"Заявка ID{request.workorderid} уже закрыта.";
 			else if (request.technician != user.sdp_name)
-				return $"Заявка ID{request.workorderid} назначена не на Вас. Текущий специалист - {request.technician}.";			
+				return $"Заявка ID{request.workorderid} назначена не на Вас. Текущий специалист - {request.technician}.";
 			else
 			{
-				SDPRequest.closeRequest(request);
-				return null;
+				if (SDPRequest.closeRequest(request))
+					return null;
+				else return $"Ошибка. Заявка ID{id} не была закрыта. Обратитесь, пожалуйста, к администратору бота.";
 			}
 		}
 
@@ -521,7 +629,7 @@ namespace SDPTelegramBot
 			string answer = null;
 			foreach (BotUser user in userList)
 			{
-				answer += $"{user.sdp_name} - {user.abbreviation}\n";
+				answer += $"{user.sdp_name} ({user.abbreviation})\n";
 			}
 			return answer;
 		}
@@ -561,8 +669,15 @@ namespace SDPTelegramBot
 				}
 				else
 				{
-					request = splitted[1];
-					return true;
+					try
+					{
+						request = splitted[1];
+						return true;
+					}
+					catch
+					{
+						return false;
+					}
 				}
 			}
 			else
@@ -621,7 +736,7 @@ namespace SDPTelegramBot
 				string message = null;
 				message += $"Вам поступила новая заявка ID{request.workorderid} от {request.requester}";
 				message += "\n" + $"Приоритет: {request.priority}";
-				message += "\n" + request.subject;
+				message += "\n\n" + request.subject;
 				message += "\n" + request.shortdescription;     // need to decode html string to plain text from full description
 				if (request.area != "Рождественка")
 					message += $"\nПлощадка: {request.area}";
@@ -639,6 +754,7 @@ namespace SDPTelegramBot
 			if (tel_id > 0)
 			{
 				string message = $"Приоритет Вашей заявки ID{request.workorderid} ({request.subject}) изменен с {old_priority} на {request.priority}.";
+				message += "\nДля подробной информации по заявке введите команду /info [ID]";
 				List<string> param = new List<string>() { "chat_id", "text" };
 				List<string> param_def = new List<string>() { tel_id.ToString(), message };
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);
@@ -652,6 +768,7 @@ namespace SDPTelegramBot
 			if (old_tech.tel_id > 0)
 			{
 				string message = $"Ваша заявка ID{request.workorderid} ({request.subject}) назначена на нового инженера - {new_tech}.";
+				message += "\nДля подробной информации по заявке введите команду /info [ID]";
 				List<string> param = new List<string>() { "chat_id", "text" };
 				List<string> param_def = new List<string>() { old_tech.tel_id.ToString(), message };
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);
@@ -683,10 +800,11 @@ namespace SDPTelegramBot
 					tel_id = user.tel_id;
 			}
 
+			SDPRequest req = new SDPRequest(request.workorderid);
 			// check if technician is supposed to get notifications
 			if (tel_id > 0)
 			{
-				string message = $"Ваша заявка ID{request.workorderid} ({request.subject}) закрыта.";
+				string message = $"Ваша заявка ID{request.workorderid} ({request.subject}) закрыта.\nВремя выполнения {req.timespentonreq}.";
 				List<string> param = new List<string>() { "chat_id", "text" };
 				List<string> param_def = new List<string>() { tel_id.ToString(), message };
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);

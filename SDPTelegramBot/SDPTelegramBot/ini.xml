@@ -1,11 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <ini>
-  <lastrequest>6794</lastrequest>
-  <offset>628589228</offset>
+  <lastrequest>6808</lastrequest>
+  <offset>628589294</offset>
   <technicians>
-    <amount>5</amount>
+    <amount>6</amount>
     <technician>Павлов Дмитрий Андреевич</technician>
-    <tel_id>120790668</tel_id>
+    <tel_id>120790667</tel_id>
     <abb>pav</abb>
     <technician>Куликов Александр Александрович</technician>
     <tel_id>298360830</tel_id>
@@ -19,6 +19,9 @@
     <technician>Шамилов Дмитрий Васильевич</technician>
     <tel_id>162436268</tel_id>
     <abb>sha</abb>
+    <technician>Кувшинова Татьяна Сергеевна</technician>
+    <tel_id>205978292</tel_id>
+    <abb>kuv</abb>
   </technicians>
   <admins>
     <amount>1</amount>
