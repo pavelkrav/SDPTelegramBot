@@ -265,7 +265,7 @@ namespace SDPTelegramBot
 		{
 			if(msg)
 			{
-				Console.WriteLine($"New tick\t{DateTime.Now.ToString("hh:mm:ss")}\toffset = {offset}\tlast request = {reqAmountSDP}");
+				Console.WriteLine($"New tick\t{DateTime.Now.ToString("H:mm:ss")}\toffset = {offset}\tlast request = {reqAmountSDP}");
 			}
 			try
 			{
@@ -330,7 +330,7 @@ namespace SDPTelegramBot
 					}
 
 					//check if request is assigned to another technician
-					if (request.technician != sdpreq.technician)
+					if (request.technician != sdpreq.technician && !String.IsNullOrWhiteSpace(sdpreq.technician))
 					{
 						int new_tech = -1;
 						for (int i = 0; i < userList.Count; i++)
@@ -360,7 +360,7 @@ namespace SDPTelegramBot
 						}
 					}
 					//check request priority
-					if (request.priority != sdpreq.priority)
+					if (request.priority != sdpreq.priority && !String.IsNullOrWhiteSpace(sdpreq.priority))
 					{
 						pushPriorityChangeToTechnician(user.tel_id, sdpreq, request.priority);
 						// change open requests list
@@ -490,6 +490,23 @@ namespace SDPTelegramBot
 							break;
 						}
 						else return null;
+					case "hui":
+						try
+						{
+							if (getTelegramBotSubCommand(ref subcommand))
+							{
+								answer = getHuiAnswer(user, subcommand);
+							}
+							else
+							{
+								answer = "Введите псевдоним посылаемого через пробел";
+							}
+						}
+						catch
+						{
+							answer = "Псевдоним введен неверно";
+						}
+						break;
 					default:
 						return null;
 				}
@@ -600,6 +617,18 @@ namespace SDPTelegramBot
 
 		private string getCloseAnswer(BotUser user, string subcommand)
 		{
+			if (subcommand == "all")
+			{
+				foreach (SDPRequest req in user.open_requests)
+				{
+					try
+					{
+						SDPRequest.closeRequest(req);
+					}
+					catch (Exception) { }
+				}
+				return null;
+			}
 			int id = 0;
 			try
 			{
@@ -629,9 +658,32 @@ namespace SDPTelegramBot
 			string answer = null;
 			foreach (BotUser user in userList)
 			{
-				answer += $"{user.sdp_name} ({user.abbreviation})\n";
+				if (user.tel_id != 0)
+					answer += $"{user.sdp_name} ({user.abbreviation})\n";
 			}
 			return answer;
+		}
+
+		private string getHuiAnswer(BotUser user, string subcommand)
+		{
+			BotUser destination = null;
+			foreach (BotUser dest in userList)
+			{
+				if (dest.abbreviation == subcommand)
+					destination = dest;
+			}
+			if (destination == null)
+				return "Такого пользователя не существует";
+			else if (destination.ToString() == "Admin")
+				return "Нельзя послать администратора";
+			else if (destination.tel_id == 0)
+				return "Пользователь не подписан на сообщения от бота";
+			else
+			{
+				string message = $"{user.sdp_name} посылает вас на хуй!";
+				pushMessageTo(destination, message);
+				return $"{destination.sdp_name} успешно послан";
+			}
 		}
 
 		private bool getTelegramBotCommand(ref string request)
@@ -715,9 +767,33 @@ namespace SDPTelegramBot
 				else
 					err = 100;
 			}
-			while (err < 5);	// deep = 5
+			while (err < 5);	// deep = 3
 
 			return newReqAmount;
+		}
+
+		private void pushMessageTo(BotUser user, string message)
+		{
+			// check if user is supposed to get notifications
+			if (user.tel_id != 0)
+			{
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { user.tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
+		}
+
+		private void pushMessageTo(long tel_id, string message)
+		{
+			// check if user is supposed to get notifications
+			if (tel_id != 0)
+			{
+				List<string> param = new List<string>() { "chat_id", "text" };
+				List<string> param_def = new List<string>() { tel_id.ToString(), message };
+				TELRequest msg = new TELRequest("sendMessage", param, param_def);
+				msg.pushRequest();
+			}
 		}
 
 		private void pushNewRequestToTechnician(SDPRequest request)

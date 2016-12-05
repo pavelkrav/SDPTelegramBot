@@ -184,7 +184,7 @@ namespace SDPTelegramBot
 			wc.Headers["Content-Type"] = "application/xml; charset=UTF-8";
 
 			string reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "/resolution" + "?OPERATION_NAME=ADD_RESOLUTION"
-				+ "&INPUT_DATA=<Details><resolution><resolutiontext>Resolved</resolutiontext></resolution></Details>"
+				+ "&INPUT_DATA=<Details><resolution><resolutiontext>Resolved via telegram bot</resolutiontext></resolution></Details>"
 				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
 			string xmlReqStr = null;
 			xmlReqStr = wc.DownloadString(reqStr);
