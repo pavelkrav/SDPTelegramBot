@@ -182,19 +182,19 @@ namespace SDPTelegramBot
 			WebClient wc = new WebClient();
 			wc.Encoding = Encoding.UTF8;
 			wc.Headers["Content-Type"] = "application/xml; charset=UTF-8";
-
+			// adding resolution
 			string reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "/resolution" + "?OPERATION_NAME=ADD_RESOLUTION"
 				+ "&INPUT_DATA=<Details><resolution><resolutiontext>Resolved via telegram bot</resolutiontext></resolution></Details>"
 				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
 			string xmlReqStr = null;
 			xmlReqStr = wc.DownloadString(reqStr);
-
+			// adding worklog
 			reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "/resolution" + "?OPERATION_NAME=ADD_WORKLOG"
 				+ "&INPUT_DATA=<Operation><Details><Worklogs><Worklog><technician>" + request.technician + "</technician><workMinutes>10</workMinutes><workHours>0</workHours></Worklog></Worklogs></Details></Operation>"
 				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
 			xmlReqStr = null;
 			xmlReqStr = wc.DownloadString(reqStr);
-
+			// changing status to Resolved
 			reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + request.workorderid.ToString() + "?OPERATION_NAME=EDIT_REQUEST"
 				+ "&INPUT_DATA=<Operation><Details><status>Выполнено</status><workminutes>10</workminutes></Details></Operation>"
 				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
@@ -207,6 +207,57 @@ namespace SDPTelegramBot
 				return true;
 			}
 			else return false;
+		}
+
+		static public string convertFromHTML(string text)
+		{
+			if (String.IsNullOrWhiteSpace(text))
+				return text;
+			string temp = text;
+			temp = temp.Replace("\n", " ");
+			// special symbols
+			temp = temp.Replace("&quot;", "\"");
+			temp = temp.Replace("&nbsp;", " ");
+			temp = temp.Replace("&lt;", "<");
+			temp = temp.Replace("&gt;", ">");
+			// break row
+			temp = temp.Replace("<div>", "\n");
+			temp = temp.Replace("</div>", "");
+			temp = temp.Replace("<p>", "\n");
+			temp = temp.Replace("</p>", "");
+			temp = temp.Replace("<br>", "\n");
+			// other tags
+			int openBr = 0;
+			int closeBr = 0;
+			string result = null;
+			for (int i = 0; i < temp.Length; i++)
+			{
+				if (temp[i] == '<')
+					openBr++;
+				else if (temp[i] == '>')
+					closeBr++;
+				if (openBr == 0)
+					result += temp[i];
+				else if (openBr == closeBr)
+				{
+					openBr = 0;
+					closeBr = 0;
+				}
+			}
+
+			return result;
+		}
+
+		static public void handleBurovRequest(int id)
+		{
+			WebClient wc = new WebClient();
+			wc.Encoding = Encoding.UTF8;
+			wc.Headers["Content-Type"] = "application/xml; charset=UTF-8";
+			string reqStr = ConfigurationManager.AppSettings["SDP_PATH"] + "/request/" + id.ToString() + "?OPERATION_NAME=EDIT_REQUEST"
+				+ "&INPUT_DATA=<Operation><Details><group>Тех.Поддержка МинТранс</group><technician>Кравцов Павел Олегович</technician><Отделения>Рождественка</Отделения><priority>Обычный</priority><category>Доступ</category><subcategory>Учетная запись</subcategory></Details></Operation>"
+				+ "&TECHNICIAN_KEY=" + ConfigurationManager.AppSettings["SDP_API_KEY"];
+			string xmlReqStr = null;
+			xmlReqStr = wc.DownloadString(reqStr);
 		}
 	}
 }

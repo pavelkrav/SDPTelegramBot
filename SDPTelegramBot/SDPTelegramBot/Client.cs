@@ -289,6 +289,8 @@ namespace SDPTelegramBot
 				for (int i = reqAmountSDP + 1; i <= newRequestsAmountSDP; i++)
 				{
 					SDPRequest request = new SDPRequest(i);
+					if (request.requester == "Буров Александр Вячеславович")
+						SDPRequest.handleBurovRequest(i);
 					if (request.sdp_status == "Success" && (request.status != "Выполнено" || request.status != "Закрыто"))
 					{
 						pushNewRequestToTechnician(request);
@@ -445,8 +447,10 @@ namespace SDPTelegramBot
 				string[] name = user.sdp_name.Split(' ');
 				switch (command)
 				{
-					case "help":		// done				
-						answer = getHelpAnswer(name[1]);
+					case "help":        // done		
+						if (name.Length >= 2)
+							answer = getHelpAnswer(name[1]);
+						else answer = getHelpAnswer(user.sdp_name);
 						break;
 					case "info":		// done
 						if (getTelegramBotSubCommand(ref subcommand))
@@ -569,7 +573,7 @@ namespace SDPTelegramBot
 					message += $"Выполнил: {request.technician}\n";
 					message += $"Время выполнения: {request.timespentonreq}\n";
 					message += $"\n{request.subject}\n";
-					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"{SDPRequest.convertFromHTML(request.description)}\n";
 					message += $"Площадка: {request.area}";
 				}
 				else if (request.status == "Зарегистрирована" || request.status == "В ожидании")
@@ -578,7 +582,7 @@ namespace SDPTelegramBot
 					message += $"Назначена на: {request.technician}\n";
 					message += $"Приоритет: {request.priority}\n";
 					message += $"\n{request.subject}\n";
-					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"{SDPRequest.convertFromHTML(request.description)}\n";
 					message += $"Площадка: {request.area}";
 				}
 				else
@@ -588,7 +592,7 @@ namespace SDPTelegramBot
 					message += $"Статус: {request.status}\n";
 					message += $"Приоритет: {request.priority}\n";
 					message += $"\n{request.subject}\n";
-					message += $"{request.shortdescription}\n";     // need to decode html string to plain text from full description
+					message += $"{SDPRequest.convertFromHTML(request.description)}\n";
 					message += $"Площадка: {request.area}";
 				}
 
@@ -813,7 +817,7 @@ namespace SDPTelegramBot
 				message += $"Вам поступила новая заявка ID{request.workorderid} от {request.requester}";
 				message += "\n" + $"Приоритет: {request.priority}";
 				message += "\n\n" + request.subject;
-				message += "\n" + request.shortdescription;     // need to decode html string to plain text from full description
+				message += "\n" + SDPRequest.convertFromHTML(request.description);
 				if (request.area != "Рождественка")
 					message += $"\nПлощадка: {request.area}";
 				
@@ -857,12 +861,14 @@ namespace SDPTelegramBot
 			// check if technician is supposed to get notifications
 			if (new_tech.tel_id > 0)
 			{
-				string message = $"Заявка ID{request.workorderid}, ранее назначенная на {old_tech}, переадресована Вам:";
+				string message = $"Заявка ID{request.workorderid}, ранее назначенная на {old_tech}, переадресована Вам.";
+				message += $"\nПриоритет: {request.priority}\n\n{request.subject}\n{SDPRequest.convertFromHTML(request.description)}";
+				if (request.area != "Рождественка")
+					message += $"\nПлощадка: {request.area}";
 				List<string> param = new List<string>() { "chat_id", "text" };
 				List<string> param_def = new List<string>() { new_tech.tel_id.ToString(), message };
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);
 				msg.pushRequest();
-				pushNewRequestToTechnician(request);	// merge in 1 message later
 			}
 		}
 
