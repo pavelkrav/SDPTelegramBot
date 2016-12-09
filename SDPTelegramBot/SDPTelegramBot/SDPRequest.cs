@@ -259,5 +259,32 @@ namespace SDPTelegramBot
 			string xmlReqStr = null;
 			xmlReqStr = wc.DownloadString(reqStr);
 		}
+
+		/// <summary>
+		/// Formatting description string for excel output
+		/// </summary>
+		/// <param name="len">Length of line</param>
+		/// <returns>String with special symbols</returns>
+		public string getDescForExcel(int len)
+		{
+			string result = "";
+			bool sw = false;
+			for (int i = 0; i < shortdescription.Length; i++)
+			{
+				char cur = shortdescription[i];
+				if (i != 0)
+					if (i % len == 0)
+					{
+						sw = true;
+					}
+				if (sw && (cur == ' ' || cur == ',' || cur == ';'))
+				{
+					result += "\x000A\t\t\t\t\t\t\t";
+					sw = false;
+				}
+				result += cur;
+			}
+			return result;
+		}
 	}
 }

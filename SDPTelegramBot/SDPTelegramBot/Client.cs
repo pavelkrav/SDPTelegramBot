@@ -9,6 +9,7 @@ using System.Configuration;
 using System.IO;
 using System.Web;
 using Newtonsoft.Json;
+using Microsoft.Office.Interop.Excel;
 
 namespace SDPTelegramBot
 {
@@ -88,7 +89,7 @@ namespace SDPTelegramBot
 			foreach (BotUser tech in userList)
 			{
 				int spc = 32 - tech.sdp_name.Length; // total shit =)
-				string spaces = null;				// tho no clue to do it properly
+				string spaces = null;				// tho no sense to do it properly
 				if (spc > 0)
 				{
 					for (int i = 0; i < spc; i++)
@@ -420,7 +421,7 @@ namespace SDPTelegramBot
 						string message = null;
 						message += $"Hi, {result.message.from.first_name}!\n";
 						message += "This bot is supposed to manage ServiceDesk Plus through telegram.\n";
-						message += "Only registered users can use the bot.\n";
+						message += $"Only registered users can use the bot. Your ID for registration: {result.message.chat.id}.\n";
 						message += "If you got any questions, contact administrator:\nPavel Kravtsov +7(916)179-60-67";
 
 						if (message != null)
@@ -892,6 +893,12 @@ namespace SDPTelegramBot
 				TELRequest msg = new TELRequest("sendMessage", param, param_def);
 				msg.pushRequest();
 			}
+			// notification for me
+			if (request.technician != ConfigurationManager.AppSettings["SDP_USER"])
+			{
+				string messageToAdmin = $"Заявка ID{request.workorderid} ({request.subject}), назначенная на {request.technician}, закрыта.";
+				pushMessageTo(113054443, messageToAdmin);
+			}
 		}
 
 		public void pushMessageToAll(string message)
@@ -907,6 +914,157 @@ namespace SDPTelegramBot
 					msg.pushRequest();
 				}
 			}
+		}
+
+		public void createTsvReport()
+		{
+			long week = 86400 * 7 * 1000;
+
+			int[] made = new int[techAmount];
+			int[] pending = new int[techAmount];
+			for (int j = 0; j < techAmount; j++)
+			{
+				made[j] = 0;
+				pending[j] = 0;
+			}
+
+			SDPRequest req = new SDPRequest(reqAmountSDP);
+			long lTime = req.createdtime;
+
+			int i = reqAmountSDP;
+
+			List<SDPRequest>[] resolvedList = new List<SDPRequest>[techAmount];
+			List<SDPRequest>[] pendingList = new List<SDPRequest>[techAmount];
+
+			for (int l = 0; l < techAmount; l++)
+			{
+				resolvedList[l] = new List<SDPRequest>();
+				pendingList[l] = new List<SDPRequest>();
+			}
+
+			do
+			{
+				req = new SDPRequest(i);
+				if (req.sdp_status == "Failed")
+				{
+					Console.WriteLine($"Checked request #{i} - Does not exist");
+					i--;
+				}
+				else if (req.status != "Выполнено")
+				{
+					if (req.status == "Зарегистрирована" || req.status == "В ожидании")
+					{
+						for (int j = 0; j < techAmount; j++)
+						{
+							if (req.technician == userList[j].sdp_name)
+							{
+								pending[j]++;
+								pendingList[j].Add(req);
+							}
+						}
+					}
+					//Console.WriteLine($"Checked request #{i} - Pending");
+					i--;
+				}
+				else if (req.resolvedtime < lTime - week - 32400000) // 32400000 = 9 hours
+				{
+					//Console.WriteLine($"Checked request #{i} - Resolved");
+					i--;
+				}
+				else if (req.sdp_status == "Success" && req.resolvedtime > lTime - week - 32400000)
+				{
+					for (int j = 0; j < techAmount; j++)
+					{
+						if (req.technician == userList[j].sdp_name)
+						{
+							made[j]++;
+							resolvedList[j].Add(req);
+						}
+					}
+					//Console.WriteLine($"Checked request #{i} - Recently resolved");
+					i--;
+				}
+			}
+			while (req.createdtime > lTime - week * 5 || req.sdp_status == "Failed");   // checking for last 5 weeks
+
+			string namep = DateTime.Now.ToString(@"dd/MM/yyyy hh-mm") + "p.tsv";
+			string name = DateTime.Now.ToString(@"dd/MM/yyyy hh-mm") + ".tsv";
+			string path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\AppData\Local\Temp\SDP\Reports\";
+
+			Directory.CreateDirectory(path);
+
+			// Resolved requests
+			using (StreamWriter sw = new StreamWriter(File.Open(path + namep, FileMode.Create), Encoding.UTF32))
+			{
+				sw.WriteLine("\tID\tТема\tДата создания\tДата выполнения\tПотрачено времени\tПлощадка");
+				for (int t = 0; t < techAmount; t++)
+				{
+					sw.WriteLine(userList[t].sdp_name + " (Выполнено " + made[t] + ")\t\t\t\t\t");
+					foreach (SDPRequest rq in resolvedList[t])
+					{
+						sw.Write("\t");
+						sw.Write(rq.workorderid + "\t");
+						sw.Write(rq.subject + "\t");
+						sw.Write(SDPRequest.longToDateTime(rq.createdtime) + "\t");
+						sw.Write(SDPRequest.longToDateTime(rq.resolvedtime) + "\t");
+						sw.Write(rq.timespentonreq + "\t");
+						sw.Write(rq.area + "\n");
+					}
+				}
+				sw.Close();
+			}
+
+			// Pending requests
+			using (StreamWriter sw = new StreamWriter(File.Open(path + name, FileMode.Create), Encoding.UTF32))
+			{
+				sw.WriteLine("\tID\tТема\tАвтор заявки\tДата создания\tПлощадка\tПриоритет\tОписание");
+				for (int t = 0; t < techAmount; t++)
+				{
+					sw.WriteLine(userList[t].sdp_name + " (Открыто " + pending[t] + ")\t\t\t\t\t\t");
+					foreach (SDPRequest rq in pendingList[t])
+					{
+						sw.Write("\t");
+						sw.Write(rq.workorderid + "\t");
+						sw.Write(rq.subject + "\t");
+						sw.Write(rq.requester + "\t");
+						sw.Write(SDPRequest.longToDateTime(rq.createdtime) + "\t");
+						sw.Write(rq.area + "\t");
+						sw.Write(rq.priority + "\t");
+						sw.Write(rq.getDescForExcel(90) + "\n");
+					}
+				}
+				sw.Close();
+			}
+
+			Console.Clear();
+			Console.WriteLine("Generated report file: " + path + namep);
+
+			Application excel = new Application();
+
+			Workbook wb = excel.Workbooks.Open(path + name);
+			Worksheet ws1 = (Worksheet)wb.Worksheets[1];
+			ws1.Name = "Открытые заявки";
+			ws1.Columns.AutoFit();
+			Range rng = ws1.Range["A1", "A2"].EntireColumn;
+			rng.Font.Bold = true;
+			rng = ws1.Range["A1", "B1"].EntireRow;
+			rng.Font.Bold = true;
+
+			Workbook wb2 = excel.Workbooks.Open(path + namep);
+			Worksheet ws2 = (Worksheet)wb2.Worksheets[1];
+			ws2.Name = "Выполненные за неделю";
+			rng = ws2.Range["A1", "A2"].EntireColumn;
+			rng.Font.Bold = true;
+			rng = ws2.Range["A1", "B1"].EntireRow;
+			rng.Font.Bold = true;
+			ws2.Columns.AutoFit();
+
+			ws2.Copy(Before: ws1);
+
+			wb2.Close(SaveChanges: false);
+			wb.SaveAs(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\AppData\Local\Temp\SDP\Reports\report.xlsx");
+			wb.Close(SaveChanges: false);
+
 		}
 
 
