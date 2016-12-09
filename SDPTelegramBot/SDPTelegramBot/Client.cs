@@ -906,7 +906,7 @@ namespace SDPTelegramBot
 			foreach (BotUser user in userList)
 			{
 				// check if user is supposed to get notifications
-				if (user.tel_id > 0)
+				if (user.tel_id > 0 && user.ToString() != "Admin")
 				{
 					List<string> param = new List<string>() { "chat_id", "text" };
 					List<string> param_def = new List<string>() { user.tel_id.ToString(), message };
