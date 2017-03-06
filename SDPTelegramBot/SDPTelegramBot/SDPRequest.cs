@@ -177,7 +177,7 @@ namespace SDPTelegramBot
 			}
 		}
 
-		static public bool closeRequest(SDPRequest request)	// true if resolved
+		static private bool closeRequest(SDPRequest request)	// true if resolved
 		{
 			WebClient wc = new WebClient();
 			wc.Encoding = Encoding.UTF8;

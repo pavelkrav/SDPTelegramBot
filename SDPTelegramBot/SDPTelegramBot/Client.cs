@@ -21,6 +21,7 @@ namespace SDPTelegramBot
 		private long offset;
 
 		private List<BotUser> userList;
+		private List<SDPCloseSession> closeSessionList;
 
 		private string iniPath;
 
@@ -28,6 +29,7 @@ namespace SDPTelegramBot
 		{
 			iniPath = ConfigurationManager.AppSettings["INI_PATH"];
 			userList = new List<BotUser>();
+			closeSessionList = new List<SDPCloseSession>();
 
 			try
 			{
@@ -270,6 +272,7 @@ namespace SDPTelegramBot
 			}
 			try
 			{
+				tickCheckCloseSessions();
 				tickCheckNewRequests();
 				tickCheckOpenRequestsChanges();
 				tickCheckTelegramUserRequests();
@@ -279,6 +282,26 @@ namespace SDPTelegramBot
 				Console.WriteLine(e.Message);
 			}
 
+		}
+
+		// check close sessions, push messages, update sessions
+		private void tickCheckCloseSessions()
+		{
+			foreach (SDPCloseSession session in	closeSessionList)
+			{
+				if(session.time <= 0)
+				{
+					if(!session.timeMsg)
+					{
+						string message = $"Введите количество минут, затраченное на выполнение заявки ID{session.request.workorderid}";
+						List<string> param = new List<string>() { "chat_id", "text" };
+						List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+						TELRequest answer = new TELRequest("sendMessage", param, param_def);
+						answer.pushRequest();
+						session.timeMsg = true;
+					}
+				}
+			}
 		}
 
 		// check new requests, push them if pending, add pending request to user open requests list
@@ -622,18 +645,6 @@ namespace SDPTelegramBot
 
 		private string getCloseAnswer(BotUser user, string subcommand)
 		{
-			if (subcommand == "all")
-			{
-				foreach (SDPRequest req in user.open_requests)
-				{
-					try
-					{
-						SDPRequest.closeRequest(req);
-					}
-					catch (Exception) { }
-				}
-				return null;
-			}
 			int id = 0;
 			try
 			{
@@ -652,9 +663,22 @@ namespace SDPTelegramBot
 				return $"Заявка ID{request.workorderid} назначена не на Вас. Текущий специалист - {request.technician}.";
 			else
 			{
-				if (SDPRequest.closeRequest(request))
-					return null;
-				else return $"Ошибка. Заявка ID{id} не была закрыта. Обратитесь, пожалуйста, к администратору бота.";
+				// check if user in close session
+				bool sessionIsOpen = false;
+				foreach (SDPCloseSession session in closeSessionList)
+				{
+					if (session.user.tel_id == user.tel_id)
+						sessionIsOpen = true;
+				}
+				if (!sessionIsOpen)
+				{
+					closeSessionList.Add(new SDPCloseSession(user, request));
+					return $"Сессия закрытия заявки ID{request.workorderid} открыта.";
+				}
+				else
+				{
+					return "У Вас уже есть открытая сессия закрытия заявки.";
+				}
 			}
 		}
 
