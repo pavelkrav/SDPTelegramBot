@@ -15,8 +15,8 @@ namespace SDPTelegramBot
 		public string resolution { get; set; }
 		public BotUser user { get; set; }
 		public SDPRequest request { get; set; }
-		public bool timeMsg { get; set; }			// true if first message was sent
-		public bool resolutionMsg { get; set; }		// true if second messge was sent
+		public bool timeMsg { get; set; }			// true if time reminder message has been sent
+		public bool resolutionMsg { get; set; }		// true if resolution reminder message has been sent
 
 		public SDPCloseSession(BotUser user, SDPRequest request)
 		{

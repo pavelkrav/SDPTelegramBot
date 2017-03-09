@@ -284,14 +284,17 @@ namespace SDPTelegramBot
 
 		}
 
-		// check close sessions, push messages, update sessions
+		// check close sessions, push messages
 		private void tickCheckCloseSessions()
 		{
+			TELRequest request = new TELRequest("getUpdates", "offset", offset.ToString());
+			GetUpdates updates = JsonConvert.DeserializeObject<GetUpdates>(request.getResponseString());
+
 			foreach (SDPCloseSession session in	closeSessionList)
 			{
 				if(session.time <= 0)
 				{
-					if(!session.timeMsg)
+					if (!session.timeMsg)
 					{
 						string message = $"Введите количество минут, затраченное на выполнение заявки ID{session.request.workorderid}";
 						List<string> param = new List<string>() { "chat_id", "text" };
@@ -300,6 +303,29 @@ namespace SDPTelegramBot
 						answer.pushRequest();
 						session.timeMsg = true;
 					}
+					else if (!session.resolutionMsg && session.time > 0)
+					{
+						string message = $"Введите решения для завки ID{session.request.workorderid}";
+						List<string> param = new List<string>() { "chat_id", "text" };
+						List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+						TELRequest answer = new TELRequest("sendMessage", param, param_def);
+						answer.pushRequest();
+						session.resolutionMsg = true;
+					}
+				}
+				if(session.time > 0 && !String.IsNullOrEmpty(session.resolution))
+				{
+					bool closed = session.close();
+					closeSessionList.Remove(session);
+					string message = null;
+					if (closed)
+						message = $"Заявка ID{session.request.workorderid} успешно закрыта.";
+					else
+						message = $"Заявка ID{session.request.workorderid} не была закрыта. Обратитесь к администратору бота.";
+					List<string> param = new List<string>() { "chat_id", "text" };
+					List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+					TELRequest answer = new TELRequest("sendMessage", param, param_def);
+					answer.pushRequest();
 				}
 			}
 		}
@@ -408,12 +434,63 @@ namespace SDPTelegramBot
 			}
 		}
 
+		// every user message should be handled here
 		private void tickCheckTelegramUserRequests()
 		{
 			TELRequest request = new TELRequest("getUpdates", "offset", offset.ToString());
 			GetUpdates updates = JsonConvert.DeserializeObject<GetUpdates>(request.getResponseString());
 			foreach (GetUpdatesResult result in updates.result)
 			{
+				foreach (SDPCloseSession session in closeSessionList)
+				{
+					// check if message includes text and user id accordance
+					if (result.message.text.Length > 0 && result.message.from.id == session.user.tel_id)
+					{
+						// check if it is not a bot command
+						string userMessage = result.message.text;
+						if (!(userMessage[0] == '/' || userMessage[0] == '!' || userMessage[0] == '.'))
+						{
+							// time first
+							if (session.time <= 0)
+							{
+								try
+								{
+									int minutes = Convert.ToInt32(userMessage);
+									if (minutes > 0)
+										session.time = minutes;
+									else throw new ArgumentOutOfRangeException();
+								}
+								catch
+								{
+									string message = "Введите корректное значение времени выполнения";
+									List<string> param = new List<string>() { "chat_id", "text" };
+									List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+									TELRequest answer = new TELRequest("sendMessage", param, param_def);
+									answer.pushRequest();
+								}
+							}
+							// then resolution
+							else if (String.IsNullOrEmpty(session.resolution))
+							{
+								try
+								{
+									if (userMessage.Length > 9)
+										session.resolution = userMessage;
+									else throw new ArgumentOutOfRangeException();
+								}
+								catch
+								{
+									string message = "Введите корректное решение для заявки (более 9 символов)";
+									List<string> param = new List<string>() { "chat_id", "text" };
+									List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+									TELRequest answer = new TELRequest("sendMessage", param, param_def);
+									answer.pushRequest();
+								}
+							}
+						}
+					}
+				}
+
 				// check if message includes text
 				if (result.message.text.Length > 0)
 				{
@@ -518,6 +595,21 @@ namespace SDPTelegramBot
 							break;
 						}
 						else return null;
+					case "abort":
+						int reqID = 0;
+						foreach(SDPCloseSession session in closeSessionList)
+						{
+							if (user.tel_id == session.user.tel_id)
+							{
+								reqID = session.request.workorderid;
+								closeSessionList.Remove(session);
+							}
+						}
+						if (reqID > 0)
+							answer = $"Сессии закрытия заявки ID{reqID} прервана.";
+						else
+							answer = "Открытых сессий нет.";
+						break;
 					case "hui":
 						try
 						{
