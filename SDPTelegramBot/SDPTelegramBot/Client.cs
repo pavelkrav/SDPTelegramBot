@@ -290,9 +290,23 @@ namespace SDPTelegramBot
 			TELRequest request = new TELRequest("getUpdates", "offset", offset.ToString());
 			GetUpdates updates = JsonConvert.DeserializeObject<GetUpdates>(request.getResponseString());
 
-			foreach (SDPCloseSession session in	closeSessionList)
+			foreach (SDPCloseSession session in	closeSessionList.ToList())
 			{
-				if(session.time <= 0)
+				if(session.time > 0 && !String.IsNullOrEmpty(session.resolution))
+				{
+					bool closed = session.close();
+					closeSessionList.Remove(session);
+					string message = null;
+					if (!closed)
+					{
+						message = $"Заявка ID{session.request.workorderid} не была закрыта. Обратитесь к администратору бота.";
+						List<string> param = new List<string>() { "chat_id", "text" };
+						List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
+						TELRequest answer = new TELRequest("sendMessage", param, param_def);
+						answer.pushRequest();
+					}
+				}
+				else
 				{
 					if (!session.timeMsg)
 					{
@@ -312,20 +326,6 @@ namespace SDPTelegramBot
 						answer.pushRequest();
 						session.resolutionMsg = true;
 					}
-				}
-				if(session.time > 0 && !String.IsNullOrEmpty(session.resolution))
-				{
-					bool closed = session.close();
-					closeSessionList.Remove(session);
-					string message = null;
-					if (closed)
-						message = $"Заявка ID{session.request.workorderid} успешно закрыта.";
-					else
-						message = $"Заявка ID{session.request.workorderid} не была закрыта. Обратитесь к администратору бота.";
-					List<string> param = new List<string>() { "chat_id", "text" };
-					List<string> param_def = new List<string>() { session.user.tel_id.ToString(), message };
-					TELRequest answer = new TELRequest("sendMessage", param, param_def);
-					answer.pushRequest();
 				}
 			}
 		}
@@ -595,9 +595,9 @@ namespace SDPTelegramBot
 							break;
 						}
 						else return null;
-					case "abort":
+					case "abort":		// done
 						int reqID = 0;
-						foreach(SDPCloseSession session in closeSessionList)
+						foreach(SDPCloseSession session in closeSessionList.ToList())
 						{
 							if (user.tel_id == session.user.tel_id)
 							{
@@ -606,11 +606,11 @@ namespace SDPTelegramBot
 							}
 						}
 						if (reqID > 0)
-							answer = $"Сессии закрытия заявки ID{reqID} прервана.";
+							answer = $"Сессия закрытия заявки ID{reqID} прервана.";
 						else
 							answer = "Открытых сессий нет.";
 						break;
-					case "hui":
+					case "hui":			// I AM SORRY
 						try
 						{
 							if (getTelegramBotSubCommand(ref subcommand))

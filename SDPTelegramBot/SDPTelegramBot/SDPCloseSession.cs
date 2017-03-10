@@ -54,6 +54,8 @@ namespace SDPTelegramBot
 				xmlReqStr = null;
 				xmlReqStr = wc.DownloadString(reqStr);
 
+				user.open_requests.Remove(request);
+
 				request = new SDPRequest(request.workorderid);        // scanning xmlReqStr for status node would be faster but I dont care
 				if (request.status == "Выполнено")
 				{
